@@ -1,5 +1,4 @@
 #include	"pitches.h"
-#include	<avr/pgmspace.h>
 // state vars
 const char STOPPED = 0;
 const char RESTART = 1;
@@ -7,34 +6,35 @@ const char PLAYING = 2;
 const char PLAYBACK = 3;
 
 // pins
-const PROGMEM char RESET = 0;
-const PROGMEM char BLUE_LED = 10;
-const PROGMEM char RED_LED = 2;
-const PROGMEM char YELLOW_LED = 3;
-const PROGMEM char GREEN_LED = 4;
-const PROGMEM char BLUE_BUTTON = 5;
-const PROGMEM char RED_BUTTON = 6;
-const PROGMEM char YELLOW_BUTTON = 7;
-const PROGMEM char GREEN_BUTTON = 8;
-const PROGMEM char SPEAKER = 9;
+const char RESET = 3;
+const char BLUE_LED = 10;
+const char RED_LED = 11;
+const char YELLOW_LED = 2;
+const char GREEN_LED = 4;
+const char BLUE_BUTTON = 5;
+const char RED_BUTTON = 7;
+const char YELLOW_BUTTON = 6;
+const char GREEN_BUTTON = 8;
+const char SPEAKER = 9;
 //other const PROGMEMant
 const int MAX_ROUNDS = 10;
 const int NUM = 4;
-const PROGMEM char LEDS[NUM] = { BLUE_LED, RED_LED, YELLOW_LED, GREEN_LED };
-const PROGMEM char BUTTONS[NUM] = { BLUE_BUTTON, RED_BUTTON, YELLOW_BUTTON, GREEN_BUTTON };
+const char LEDS[NUM] = { BLUE_LED, RED_LED, YELLOW_LED, GREEN_LED };
+const char BUTTONS[NUM] = { BLUE_BUTTON, RED_BUTTON, YELLOW_BUTTON, GREEN_BUTTON };
 const float TONES[NUM] = {NOTE_C4, NOTE_E4, NOTE_G4, NOTE_C5};
-const PROGMEM int BUZZ_LENGTH = 500; //seconds
-const int MAX_WAIT = 100;
+const int BUZZ_LENGTH = 500; //seconds
+const int MAX_WAIT = 200;
 
 //songs
-const PROGMEM int WIN_SONG_L = 10;
-const PROGMEM int LOSE_SONG_L = 10;
-const PROGMEM int LOSE_SONG[LOSE_SONG_L] = {0,1,3,2,1,2,3,1,2,0};
-const PROGMEM int WIN_SONG[WIN_SONG_L] = {0,3,1,1,2,1,3,2,0,0};
+const int WIN_SONG_L = 10;
+const int LOSE_SONG_L = 10;
+const int LOSE_SONG[LOSE_SONG_L] = {0,1,3,2,1,2,3,1,2,0};
+const int WIN_SONG[WIN_SONG_L] = {0,3,1,1,2,1,3,2,0,0};
 
 //global variables
 char state;
 char buttons;
+char first = 1;
 int curr_round;
 int wait;
 int num_rounds;
@@ -46,7 +46,7 @@ void get_buttons()
 	buttons = (char) 0;
 	for(i=0; i<NUM; i++)
 		{
-		if(digitalRead(pgm_read_byte_near(BUTTONS + i)) == LOW)
+		if(digitalRead(BUTTONS[i]) == LOW)
 			{
 			buttons = (buttons & ((0x1 << i) ^ ((char) 0xFF))) | (0x1 << i);
 			}
@@ -55,10 +55,10 @@ void get_buttons()
 
 void flash_and_buzz(int i)
 	{
-	digitalWrite(pgm_read_byte_near(LEDS + i), HIGH);
-	tone(pgm_read_byte_near(&SPEAKER), TONES[i], pgm_read_byte_near(&BUZZ_LENGTH));
-	delay(pgm_read_byte_near(&BUZZ_LENGTH));
-	digitalWrite(pgm_read_byte_near(LEDS+ i), LOW);
+	digitalWrite(LEDS[i], HIGH);
+	tone(SPEAKER, TONES[i], BUZZ_LENGTH);
+	delay(BUZZ_LENGTH);
+	digitalWrite(LEDS[i], LOW);
 	} // end flash_and_buzz
 
 void flash_leds()
@@ -77,9 +77,9 @@ void game_over()
 	{
 	Serial.println(F("Game over!"));
 	int i;
-	for(i=0; i<pgm_read_byte_near(&LOSE_SONG_L); i++)
+	for(i=0; i<LOSE_SONG_L; i++)
 		{
-		flash_and_buzz(pgm_read_byte_near(LOSE_SONG+ i));
+		flash_and_buzz(LOSE_SONG[i]);
 		}
 	}
 
@@ -87,35 +87,45 @@ void winner()
 	{
 	Serial.println(F("Winner!"));
 	int i;
-	for(i=0; i<pgm_read_byte_near(&WIN_SONG_L); i++)
+	for(i=0; i<WIN_SONG_L; i++)
 		{
-		flash_and_buzz(pgm_read_byte_near(WIN_SONG+ i));
+		flash_and_buzz(WIN_SONG[i]);
 		}
 	}
 
-void(* reset) (void) = 0;
+void reset()
+	{
+	if(state != STOPPED){
+		state = STOPPED;	
+	}else{
+		state = PLAYBACK;
+		num_rounds = 0;
+		buttons = 0;
+		}	
+	}	
 
 // setup()
 void setup()
 	{
 	delay(1000);
-	attachInterrupt(digitalPinToInterrupt(RESET), reset, LOW);
+	state = STOPPED;
+	attachInterrupt(1, reset, LOW);
 	Serial.begin(9600);
 	Serial.println(F("Setup"));
-	state = STOPPED;
+	//state = STOPPED;
 
 	pinMode(A0,INPUT);
 	randomSeed(analogRead(A0));
 
-	pinMode(pgm_read_byte_near(&SPEAKER), OUTPUT);
-	pinMode(pgm_read_byte_near(RESET), INPUT);
+	pinMode(SPEAKER, OUTPUT);
+	pinMode(RESET, INPUT);
 
 	int i;
 	for(i=0; i<NUM; i++)
 		{
-		pinMode(pgm_read_byte_near(BUTTONS + i), INPUT);
-		pinMode(pgm_read_byte_near(LEDS + i), OUTPUT);
-		digitalWrite(pgm_read_byte_near(LEDS + i),LOW);
+		pinMode(BUTTONS[i], INPUT);
+		pinMode(LEDS[i], OUTPUT);
+		digitalWrite(LEDS[i],LOW);
 		}
 	} //end setup
 
@@ -124,47 +134,33 @@ void loop()
 	{
 	// [RESTART]
 	//reset the device
-	if(state == RESTART)
-		{
-		delay(500);
-		state = PLAYBACK;
-		num_rounds = 0;
-		buttons = 0;
-		return;
-		}
+//	if(state == RESTART)
+//		{
+//		delay(500);
+//		state = PLAYBACK;
+//		num_rounds = 0;
+//		buttons = 0;
+//		return;
+//		}
 
 	// [STOPPED]
 	//device is stopped, just check for reset
 	if(state == STOPPED)
 		{
-		while(true)
-			{
-			if(digitalRead(RESET) == LOW)
-				{
-				delay(500);
-				Serial.println(F("RESET"));
-				state = RESTART;
-				return;
-				}
-			}
+//		while(true)
+//			{
+//			if(digitalRead(RESET) == LOW)
+//				{
+//				delay(500);
+//				Serial.println(F("RESET"));
+//				state = RESTART;
+//				return;
+//				}
+		return;
+		//	}
 		}
 
 	int i;
-
-	// [RESET?]
-	//check if reset button had been pressed generally
-	if((state != STOPPED) && (digitalRead(RESET) == LOW))
-		{
-		Serial.println(F("STOPPED"));
-		state = STOPPED;
-		return;
-		}
-	else if(digitalRead(RESET) == LOW)
-		{
-		Serial.println(F("RESET"));
-		state = RESTART;
-		return;
-		}
 	
 	// [PLAYBACK]
 	// the pattern is being played for the user
